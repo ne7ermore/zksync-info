@@ -138,7 +138,7 @@ async def get_zks_last_tx(date):
     if diff_hours > 1:
         return f"{diff_hours}H"
 
-    return "Seconds"
+    return "Sec"
 
 async def get_zks_info(session, address):
     url = f"https://zksync2-mainnet-explorer.zksync.io/transactions?limit=100&direction=older&accountAddress={address}"
