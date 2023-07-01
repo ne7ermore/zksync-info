@@ -130,13 +130,17 @@ async def get_zks_last_tx(date):
 
     diff = current_dateTime-datetime_object
     diff_days = diff.days
-    diff_hours = diff.seconds // 3600
 
     if diff_days > 0:
-        return f"{diff_days}D"
+        return f"{diff_days}d"
     
+    diff_hours = diff.seconds // 3600
     if diff_hours > 1:
-        return f"{diff_hours}H"
+        return f"{diff_hours}h"
+    
+    diff_mins = diff.seconds // 60
+    if diff_mins > 1:
+        return f"{diff_mins}m"
 
     return "Sec"
 
