@@ -217,7 +217,7 @@ async def main(args):
             await session.close()
             
             df = pd.DataFrame(results, columns=base_columns+task_colums)          
-            df.loc["总计"] = ["", df['m-eth'].sum(), df['m-tx'].sum(), df['eth'].sum(), df['usdc'].sum(), "", "", "", "", "", "", "", df['fee'].sum()] + ["" for _ in task_colums]
+            df.loc["总计"] = ["总计", df['m-eth'].sum(), df['m-tx'].sum(), df['eth'].sum(), df['usdc'].sum(), "", "", "", "", "", "", "", df['fee'].sum()] + ["" for _ in task_colums]
             df = df.to_string(index=False)    
 
         else:
