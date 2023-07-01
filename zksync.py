@@ -131,6 +131,9 @@ async def get_zks_last_tx(date):
     diff = current_dateTime-datetime_object
     diff_days = diff.days
 
+    if diff_days > 14:
+        return f"*{diff_days}d*"
+
     if diff_days > 0:
         return f"{diff_days}d"
     
@@ -142,7 +145,7 @@ async def get_zks_last_tx(date):
     if diff_mins > 1:
         return f"{diff_mins}m"
 
-    return "Sec"
+    return f"{diff.seconds}s"
 
 async def get_zks_info(session, address):
     url = f"https://zksync2-mainnet-explorer.zksync.io/transactions?limit=100&direction=older&accountAddress={address}"
@@ -213,7 +216,9 @@ async def main(args):
             results = await asyncio.gather(*tasks)
             await session.close()
             
-            df = pd.DataFrame(results, columns=base_columns+task_colums).to_string(index=False)        
+            df = pd.DataFrame(results, columns=base_columns+task_colums)          
+            df.loc["总计"] = ["", df['m-eth'].sum(), df['m-tx'].sum(), df['eth'].sum(), df['usdc'].sum(), "", "", "", "", "", "", "", df['fee'].sum()] + ["" for _ in task_colums]
+            df = df.to_string(index=False)    
 
         else:
             idx = index-1
@@ -224,7 +229,7 @@ async def main(args):
             results = await asyncio.gather(*tasks)
             await session.close()            
             
-            df = pd.DataFrame(results, columns=base_columns+task_colums).to_string(index=False)        
+            df = pd.DataFrame(results, columns=base_columns+task_colums).to_string(index=False)       
 
     print(df)
 
