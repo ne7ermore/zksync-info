@@ -1,0 +1,240 @@
+import asyncio
+import aiohttp
+from datetime import datetime, timezone
+from dateutil.parser import parse
+from collections import defaultdict
+
+import pandas as pd
+pd.set_option('display.unicode.east_asian_width', True) #设置输出右对齐
+
+from wallet import *
+
+RATIO = 5
+
+ZKS_ETH_CONTRACT = "0x0000000000000000000000000000000000000000"
+ZKS_USDC_CONTRACT = "0x3355df6d4c9c3035724fd0e3914de96a5a83aaf4"
+EMPTYCONTRACT = "0x0000000000000000000000000000000000008001".lower()
+
+CONTRACTZKSTASK = (
+    ["0x2da10a1e27bf85cedd8ffb1abbe97e53391c0295", "syncSwap"],
+    ["0x39e098a153ad69834a9dac32f0fca92066ad03f4", "mav"],
+    ["0x6C31035D62541ceba2Ac587ea09891d1645D6D07", "veSync"],
+    ["0x9606eC131EeC0F84c95D82c9a63959F2331cF2aC", "izi"],
+    ["0xCBE2093030F485adAaf5b61deb4D9cA8ADEAE509", "zns"],
+    ["0xC5db68F30D21cBe0C9Eac7BE5eA83468d69297e6", "reactor"],
+    ["0x04e9Db37d8EA0760072e1aCE3F2A219988Fdac29", "reactor"],
+    ["0x1BbD33384869b30A323e15868Ce46013C82B86FB", "eraLend"],
+    ["0x1181D7BE04D80A8aE096641Ee1A87f7D557c6aeb", "eraLend"],
+    ["0x8B791913eB07C32779a16750e3868aA8495F5964", "mute"],
+    ["0x6e2B76966cbD9cF4cC2Fa0D76d24d5241E0ABC2F", "1inch"],    
+    ["0xd29Aa7bdD3cbb32557973daD995A3219D307721f", "teva"],    
+    ["0x50B2b7092bCC15fbB8ac74fE9796Cf24602897Ad", "teva"],    
+)
+
+CONTRACT2ZKSTASK = {x.lower(): y for x, y in CONTRACTZKSTASK}
+
+base_columns = ["#", "m-eth", "m-tx", "eth", "usdc", "tx", "最后交易", "day", "week", "mon", "不同合约", "金额", "fee"]
+
+def get_task_colums():
+    task_colums = []
+    seen = set()
+
+    for _, y in CONTRACTZKSTASK:
+        if y not in seen:
+            seen.add(y)
+            task_colums.append(y)
+    return task_colums
+
+task_colums = get_task_colums()
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+async def get_eth_info(session, address, url="https://cloudflare-eth.com"):
+    params = [
+        {
+            "jsonrpc": "2.0",
+            "method": "eth_getBalance",
+            "params": [address, "latest"],
+            "id": 1
+        },
+        {
+            "jsonrpc": "2.0",
+            "method": "eth_getTransactionCount",
+            "params": [address, "latest"],
+            "id": 2
+        }
+    ]
+
+    async with session.post(url, json=params) as res:
+        results = await res.json()
+    balance = round(int(results[0]["result"], 16) / 1e18, RATIO)
+    tx_count = int(results[1]["result"], 16)
+    return balance, tx_count
+
+async def get_zks_base_info(session, address):
+    url = f"https://zksync2-mainnet-explorer.zksync.io/address/{address}"
+
+    async with session.get(url) as res:
+        data = await res.json()    
+
+    tx = data['info']["sealedNonce"]
+
+    balances = data["info"]["balances"]
+
+    eth_blance = round(int(balances[ZKS_ETH_CONTRACT]["balance"], 16) / 1e18, RATIO) if ZKS_ETH_CONTRACT in balances else 0
+    usdc_blance = round(int(balances[ZKS_USDC_CONTRACT]["balance"], 16) / 1e6, RATIO) if ZKS_USDC_CONTRACT in balances else 0
+
+    return eth_blance, usdc_blance, tx
+
+async def get_amount(address, list):
+    total_amount = 0
+    for data in list:
+        if (data["from"].lower() == address.lower() and data["to"].lower() != EMPTYCONTRACT) or data["to"].lower() == address.lower() and data["from"].lower() != EMPTYCONTRACT:
+            symbol = data['tokenInfo']['symbol']
+            if symbol == "ETH":
+                total_amount += int(data['amount'], 16) / 1e18 * float(data['tokenInfo']['usdPrice'])
+            elif symbol == "USDC":
+                total_amount += int(data['amount'], 16) / 1e6
+
+    return total_amount
+
+async def process_transactions(address, data_list, months, weeks, days, contracts):
+    total_amount = total_fee = 0
+    for data in data_list:
+        if data['balanceChanges'][0]['from'].lower() == address.lower():
+            total_amount += await get_amount(address, data["erc20Transfers"])
+
+            tx_date = parse(data["receivedAt"]).replace(tzinfo=timezone.utc)
+            months.add(tx_date.strftime("%Y-%m"))
+            weeks.add(tx_date.strftime("%Y-%m-%W"))
+            days.add(tx_date.strftime("%Y-%m-%d"))
+
+            contracts.add(data["data"]["contractAddress"])
+
+            total_fee += round(int(data["fee"], 16) / 1e18, 5)
+
+    return total_amount, total_fee
+
+async def get_zks_last_tx(date):
+    datetime_object = parse(date).replace(tzinfo=timezone.utc)
+    current_dateTime = datetime.now(timezone.utc)
+
+    diff = current_dateTime-datetime_object
+    diff_days = diff.days
+    diff_hours = diff.seconds // 3600
+
+    if diff_days > 0:
+        return f"{diff_days}D"
+    
+    if diff_hours > 1:
+        return f"{diff_hours}H"
+
+    return "Seconds"
+
+async def get_zks_info(session, address):
+    url = f"https://zksync2-mainnet-explorer.zksync.io/transactions?limit=100&direction=older&accountAddress={address}"
+    async with session.get(url) as res:
+        data = await res.json()
+
+    total = data["total"]
+    last_tx_time = await get_zks_last_tx(data["list"][0]["receivedAt"])
+    months, weeks, days, contracts = set(), set(), set(), set()
+    
+    if total > 100:
+        total_amounts = total_fees = offset = 0
+        from_block_number = data["list"][0]["blockNumber"]
+        from_tx_index = data["list"][0]["indexInBlock"]
+
+        while True:
+            new_url = url + f"&fromBlockNumber={from_block_number}&fromTxIndex={from_tx_index}&offset={offset}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(new_url) as res:
+                    new_data = await res.json()         
+
+            total_amount, total_fee = await process_transactions(address, new_data["list"], months, weeks, days, contracts)
+            total_amounts += total_amount
+            total_fees += total_fee
+
+            list_length = len(new_data["list"])
+            if list_length < 100:
+                break
+
+            offset += list_length
+    else:
+        total_amounts, total_fees = await process_transactions(address, data["list"], months, weeks, days, contracts)
+
+    return last_tx_time, round(total_amounts, 2), round(total_fees, 5), len(months), len(weeks), len(days), len(contracts)
+
+async def get_zks_task(session, address):
+    url = f"https://zksync2-mainnet-explorer.zksync.io/transactions?limit=100&direction=older&accountAddress={address}"
+    async with session.get(url) as res:
+        data = await res.json()     
+
+    tasks = defaultdict(int)
+    for contract in [hashs["data"]["contractAddress"].lower() for hashs in data["list"]]:
+        if contract in CONTRACT2ZKSTASK:
+            tasks[CONTRACT2ZKSTASK[contract]] += 1
+
+    return tasks
+
+async def get_all_zks_info(session, address, idx):
+    meth, mtx = await get_eth_info(session, address)
+    zeth, zusdc, ztx = await get_zks_base_info(session, address)
+    ltx, amount, fee, mon, week, day, contract = await get_zks_info(session, address)
+    tasks = await get_zks_task(session, address)
+    tasks_info = [tasks[task] if task in tasks else 0 for task in task_colums]    
+
+    return [f"lu{idx+1}", meth, mtx, zeth, zusdc, ztx, ltx, day, week, mon, contract, amount, fee] + tasks_info
+
+
+async def main(args):
+    index = args.idx
+
+    async with aiohttp.ClientSession() as session:
+        if index == 0:
+            tasks = []
+
+            for idx, address in enumerate(ADDRESSLIST):
+                tasks.append(asyncio.create_task(get_all_zks_info(session, address, idx)))
+
+            results = await asyncio.gather(*tasks)
+            await session.close()
+            
+            df = pd.DataFrame(results, columns=base_columns+task_colums).to_string(index=False)        
+
+        else:
+            idx = index-1
+            assert idx < len(ADDRESSLIST)
+
+            address = ADDRESSLIST[idx]
+            tasks = [asyncio.create_task(get_all_zks_info(session, address, idx))]
+            results = await asyncio.gather(*tasks)
+            await session.close()            
+            
+            df = pd.DataFrame(results, columns=base_columns+task_colums).to_string(index=False)        
+
+    print(df)
+
+    if args.save:
+        df.to_excel('zks-info.xlsx', index=False)
+    
+    
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-idx', type=int, default=0)
+    parser.add_argument('-save', type=str2bool, default=False)
+
+    args = parser.parse_args()
+
+    asyncio.run(main(args))
