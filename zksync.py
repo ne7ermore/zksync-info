@@ -21,14 +21,14 @@ CONTRACTZKSTASK = (
     ["0x6C31035D62541ceba2Ac587ea09891d1645D6D07", "veSync"],
     ["0x9606eC131EeC0F84c95D82c9a63959F2331cF2aC", "izi"],
     ["0xCBE2093030F485adAaf5b61deb4D9cA8ADEAE509", "zns"],
-    ["0xC5db68F30D21cBe0C9Eac7BE5eA83468d69297e6", "reactor"],
-    ["0x04e9Db37d8EA0760072e1aCE3F2A219988Fdac29", "reactor"],
     ["0x1BbD33384869b30A323e15868Ce46013C82B86FB", "eraLend"],
     ["0x1181D7BE04D80A8aE096641Ee1A87f7D557c6aeb", "eraLend"],
     ["0x8B791913eB07C32779a16750e3868aA8495F5964", "mute"],
     ["0x6e2B76966cbD9cF4cC2Fa0D76d24d5241E0ABC2F", "1inch"],    
     ["0xd29Aa7bdD3cbb32557973daD995A3219D307721f", "teva"],    
-    ["0x50B2b7092bCC15fbB8ac74fE9796Cf24602897Ad", "teva"],    
+    ["0x50B2b7092bCC15fbB8ac74fE9796Cf24602897Ad", "teva"],   
+    ["0xC5db68F30D21cBe0C9Eac7BE5eA83468d69297e6", "reactor"],
+    ["0x04e9Db37d8EA0760072e1aCE3F2A219988Fdac29", "reactor"],     
 )
 
 CONTRACT2ZKSTASK = {x.lower(): y for x, y in CONTRACTZKSTASK}
@@ -87,6 +87,8 @@ async def get_zks_base_info(session, address):
         data = await res.json()    
 
     tx = data['info']["sealedNonce"]
+    if tx < 10:
+        tx = f"*{tx}*"
 
     balances = data["info"]["balances"]
 
@@ -138,11 +140,11 @@ async def get_zks_last_tx(date):
         return f"{diff_days}d"
     
     diff_hours = diff.seconds // 3600
-    if diff_hours > 1:
+    if diff_hours > 0:
         return f"{diff_hours}h"
     
     diff_mins = diff.seconds // 60
-    if diff_mins > 1:
+    if diff_mins > 0:
         return f"{diff_mins}m"
 
     return f"{diff.seconds}s"
