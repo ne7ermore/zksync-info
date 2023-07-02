@@ -231,9 +231,11 @@ async def main(args):
             results = await asyncio.gather(*tasks)
             await session.close()            
             
-            df = pd.DataFrame(results, columns=base_columns+task_colums).to_string(index=False)       
+            df = pd.DataFrame(results, columns=base_columns+task_colums).to_string(index=False)   
 
     print(df)
+    print("-"*200)
+    print(f"时间: {str(datetime.now())[:19]}")
 
     if args.save:
         df.to_excel('zks-info.xlsx', index=False)
