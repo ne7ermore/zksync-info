@@ -4,12 +4,19 @@ from datetime import datetime, timezone
 from dateutil.parser import parse
 from collections import defaultdict
 
+from rich.console import Console
+from rich.table import Table
+
 import pandas as pd
 pd.set_option('display.unicode.east_asian_width', True) #设置输出右对齐
 
 from wallet import *
 
 RATIO = 5
+METH_INDEX = 1
+ETH_INDEX = 3
+USDC_INDEX = 4
+FEE_INDEX = 12
 
 ZKS_ETH_CONTRACT = "0x0000000000000000000000000000000000000000"
 ZKS_USDC_CONTRACT = "0x3355df6d4c9c3035724fd0e3914de96a5a83aaf4"
@@ -73,12 +80,14 @@ async def get_eth_info(session, address, url="https://cloudflare-eth.com"):
             "id": 2
         }
     ]
-
-    async with session.post(url, json=params) as res:
-        results = await res.json()
-    balance = round(int(results[0]["result"], 16) / 1e18, RATIO)
-    tx_count = int(results[1]["result"], 16)
-    return balance, tx_count
+    try:
+        async with session.post(url, json=params) as res:
+            results = await res.json()
+        balance = round(int(results[0]["result"], 16) / 1e18, RATIO)
+        tx_count = int(results[1]["result"], 16)
+        return balance, tx_count
+    except:
+        return 0, 0
 
 async def get_zks_base_info(session, address):
     url = f"https://zksync2-mainnet-explorer.zksync.io/address/{address}"
@@ -88,7 +97,7 @@ async def get_zks_base_info(session, address):
 
     tx = data['info']["sealedNonce"]
     if tx < 10:
-        tx = f"*{tx}*"
+        tx = f"[red]{tx}[red]"
 
     balances = data["info"]["balances"]
 
@@ -134,7 +143,7 @@ async def get_zks_last_tx(date):
     diff_days = diff.days
 
     if diff_days > 14:
-        return f"*{diff_days}d*"
+        return f"[red]{diff_days}d[/red]"
 
     if diff_days > 0:
         return f"{diff_days}d"
@@ -205,7 +214,7 @@ async def get_all_zks_info(session, address, idx):
     return [f"lu{idx+1}", meth, mtx, zeth, zusdc, ztx, ltx, day, week, mon, contract, amount, fee] + tasks_info
 
 
-async def main(args):
+async def pd_show(args):
     index = args.idx
 
     async with aiohttp.ClientSession() as session:
@@ -219,7 +228,7 @@ async def main(args):
             await session.close()
             
             df = pd.DataFrame(results, columns=base_columns+task_colums)          
-            df.loc["总计"] = ["总计", df['m-eth'].sum(), df['m-tx'].sum(), df['eth'].sum(), df['usdc'].sum(), "", "", "", "", "", "", "", df['fee'].sum()] + ["" for _ in task_colums]
+            df.loc["总计"] = ["总计", df['m-eth'].sum(), "", df['eth'].sum(), df['usdc'].sum(), "", "", "", "", "", "", "", df['fee'].sum()] + ["" for _ in task_colums]
             df = df.to_string(index=False)    
 
         else:
@@ -239,6 +248,63 @@ async def main(args):
 
     if args.save:
         df.to_excel('zks-info.xlsx', index=False)
+
+async def rich_show(args):
+    index = args.idx
+
+    table = Table(title=f"Zksync: {str(datetime.now())[:19]}")
+    for col in base_columns+task_colums:
+        table.add_column(col)
+
+    async with aiohttp.ClientSession() as session:
+        if index == 0:
+            tasks = []
+
+            for idx, address in enumerate(ADDRESSLIST):
+                tasks.append(asyncio.create_task(get_all_zks_info(session, address, idx)))
+
+            results = await asyncio.gather(*tasks)
+            await session.close()
+
+
+            meth = eth = usdc = fee = 0
+            for result in results:
+                meth += result[METH_INDEX]
+                eth += result[ETH_INDEX]
+                usdc += result[USDC_INDEX]
+                fee += result[FEE_INDEX]
+
+                table.add_row(*[str(r) for r in result])
+
+            last_row = ["" for _ in range(len(base_columns+task_colums))]
+            last_row[0] = "总计"
+            last_row[METH_INDEX] = f"{round(meth, RATIO)}"
+            last_row[ETH_INDEX] = f"{round(eth, RATIO)}"
+            last_row[USDC_INDEX] = f"{round(usdc, RATIO)}"
+            last_row[FEE_INDEX] = f"{round(fee, RATIO)}"
+            table.add_row(*last_row)
+
+        else:
+            idx = index-1
+            assert idx < len(ADDRESSLIST)
+
+            address = ADDRESSLIST[idx]
+            tasks = [asyncio.create_task(get_all_zks_info(session, address, idx))]
+            results = await asyncio.gather(*tasks)
+            await session.close()    
+
+            for result in results:
+                table.add_row(*[str(r) for r in result])
+
+    Console().print(table)
+
+
+async def main(args):
+    if args.use_pd:
+        await pd_show(args)
+    else:
+        await rich_show(args)
+
     
     
 if __name__ == "__main__":
@@ -247,6 +313,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-idx', type=int, default=0)
     parser.add_argument('-save', type=str2bool, default=False)
+    parser.add_argument('-use_pd', type=str2bool, default=False)
 
     args = parser.parse_args()
 
