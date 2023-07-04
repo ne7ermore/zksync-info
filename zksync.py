@@ -106,6 +106,9 @@ async def get_zks_base_info(session, address):
     balances = data["info"]["balances"]
 
     eth_blance = round(int(balances[ZKS_ETH_CONTRACT]["balance"], 16) / 1e18, RATIO) if ZKS_ETH_CONTRACT in balances else 0
+    if eth_blance < 0.005:
+        eth_blance = f"[red]{eth_blance}[/red]"
+
     usdc_blance = round(int(balances[ZKS_USDC_CONTRACT]["balance"], 16) / 1e6, RATIO) if ZKS_USDC_CONTRACT in balances else 0
 
     return eth_blance, usdc_blance, tx
