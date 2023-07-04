@@ -99,9 +99,10 @@ async def get_zks_base_info(session, address):
     if tx < 10:
         tx = f"[red]{tx}[/red]"
     elif tx >= 100:
+        tx = f"[bold][green]{tx}[/green][/bold]"
+    elif tx >= 25:
         tx = f"[green]{tx}[/green]"
     
-
     balances = data["info"]["balances"]
 
     eth_blance = round(int(balances[ZKS_ETH_CONTRACT]["balance"], 16) / 1e18, RATIO) if ZKS_ETH_CONTRACT in balances else 0
@@ -194,12 +195,22 @@ async def get_zks_info(session, address):
         total_amounts, total_fees = await process_transactions(address, data["list"], months, weeks, days, contracts)
 
     total_amounts = round(total_amounts, 2)
-    if total_amounts < 1000:
+    if total_amounts < 10000:
         total_amounts = f"[red]{total_amounts}[/red]"
-    elif total_amounts >= 5000:
-        total_amounts = f"[green]{total_amounts}[/green]"        
+    elif total_amounts >= 250000:
+        total_amounts = f"[bold][green]{total_amounts}[/green][/bold]"        
+    elif total_amounts >= 50000:
+        total_amounts = f"[green]{total_amounts}[/green]"
 
-    return last_tx_time, total_amounts, round(total_fees, 5), len(months), len(weeks), len(days), len(contracts)
+    mon = len(months)
+    if mon < 2:
+        mon = f"[red]{mon}[/red]"
+    elif mon >= 9:
+        mon = f"[bold][green]{mon}[/green][/bold]"        
+    elif mon >= 6:
+        mon = f"[green]{mon}[/green]"        
+
+    return last_tx_time, total_amounts, round(total_fees, 5), mon, len(weeks), len(days), len(contracts)
 
 async def get_zks_task(session, address):
     url = f"https://zksync2-mainnet-explorer.zksync.io/transactions?limit=100&direction=older&accountAddress={address}"
