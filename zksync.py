@@ -97,7 +97,10 @@ async def get_zks_base_info(session, address):
 
     tx = data['info']["sealedNonce"]
     if tx < 10:
-        tx = f"[red]{tx}[red]"
+        tx = f"[red]{tx}[/red]"
+    elif tx >= 100:
+        tx = f"[green]{tx}[/green]"
+    
 
     balances = data["info"]["balances"]
 
@@ -190,7 +193,13 @@ async def get_zks_info(session, address):
     else:
         total_amounts, total_fees = await process_transactions(address, data["list"], months, weeks, days, contracts)
 
-    return last_tx_time, round(total_amounts, 2), round(total_fees, 5), len(months), len(weeks), len(days), len(contracts)
+    total_amounts = round(total_amounts, 2)
+    if total_amounts < 1000:
+        total_amounts = f"[red]{total_amounts}[/red]"
+    elif total_amounts >= 5000:
+        total_amounts = f"[green]{total_amounts}[/green]"        
+
+    return last_tx_time, total_amounts, round(total_fees, 5), len(months), len(weeks), len(days), len(contracts)
 
 async def get_zks_task(session, address):
     url = f"https://zksync2-mainnet-explorer.zksync.io/transactions?limit=100&direction=older&accountAddress={address}"
