@@ -106,9 +106,6 @@ async def get_zks_base_info(session, address):
     balances = data["info"]["balances"]
 
     eth_blance = round(int(balances[ZKS_ETH_CONTRACT]["balance"], 16) / 1e18, RATIO) if ZKS_ETH_CONTRACT in balances else 0
-    if eth_blance < 0.005:
-        eth_blance = f"[red]{eth_blance}[/red]"
-
     usdc_blance = round(int(balances[ZKS_USDC_CONTRACT]["balance"], 16) / 1e6, RATIO) if ZKS_USDC_CONTRACT in balances else 0
 
     return eth_blance, usdc_blance, tx
@@ -297,6 +294,9 @@ async def rich_show(args):
                 usdc += result[USDC_INDEX]
                 fee += result[FEE_INDEX]
 
+                if result[ETH_INDEX] <= 0.005:
+                    result[ETH_INDEX] = f"[red]{result[ETH_INDEX]}[/red]"
+
                 table.add_row(*[str(r) for r in result])
 
             last_row = ["" for _ in range(len(base_columns+task_colums))]
@@ -317,6 +317,10 @@ async def rich_show(args):
             await session.close()    
 
             for result in results:
+                
+                if result[ETH_INDEX] <= 0.005:
+                    result[ETH_INDEX] = f"[red]{result[ETH_INDEX]}[/red]"
+
                 table.add_row(*[str(r) for r in result])
 
     Console().print(table)
