@@ -3,6 +3,8 @@ import aiohttp
 from datetime import datetime, timezone
 from dateutil.parser import parse
 from collections import defaultdict
+from urllib.parse import quote
+import requests
 
 from rich.console import Console
 from rich.table import Table
@@ -18,8 +20,8 @@ ETH_INDEX = 3
 USDC_INDEX = 4
 FEE_INDEX = 12
 
-ZKS_ETH_CONTRACT = "0x0000000000000000000000000000000000000000"
-ZKS_USDC_CONTRACT = "0x3355df6d4c9c3035724fd0e3914de96a5a83aaf4"
+ZKS_ETH_CONTRACT = "0x000000000000000000000000000000000000800A"
+ZKS_USDC_CONTRACT = "0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4"
 EMPTYCONTRACT = "0x0000000000000000000000000000000000008001".lower()
 
 CONTRACTZKSTASK = (
@@ -65,8 +67,22 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+def get_eth_price():
+    url = "https://www.okx.com/api/v5/market/ticker?instId=ETH-USD-SWAP"
 
-async def get_eth_info(session, address, url="https://cloudflare-eth.com"):
+    try:
+        data = requests.get(url).json()
+        price = data["data"][0]["last"]
+
+        return float(price)
+    except Exception as e:
+        print(e)
+        return 1935.0
+ETHPRICE = get_eth_price()
+
+async def get_eth_info(session, address):
+    url="https://cloudflare-eth.com"
+
     params = [
         {
             "jsonrpc": "2.0",
@@ -91,12 +107,12 @@ async def get_eth_info(session, address, url="https://cloudflare-eth.com"):
         return 0, 0
 
 async def get_zks_base_info(session, address):
-    url = f"https://zksync2-mainnet-explorer.zksync.io/address/{address}"
+    url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}"
 
     async with session.get(url) as res:
         data = await res.json()    
 
-    tx = data['info']["sealedNonce"]
+    tx = data["sealedNonce"]
     if tx < 10:
         tx = f"[red]{tx}[/red]"
     elif tx >= 100:
@@ -104,41 +120,62 @@ async def get_zks_base_info(session, address):
     elif tx >= 25:
         tx = f"[green]{tx}[/green]"
     
-    balances = data["info"]["balances"]
+    balances = data["balances"]
 
-    eth_blance = round(int(balances[ZKS_ETH_CONTRACT]["balance"], 16) / 1e18, RATIO) if ZKS_ETH_CONTRACT in balances else 0
-    usdc_blance = round(int(balances[ZKS_USDC_CONTRACT]["balance"], 16) / 1e6, RATIO) if ZKS_USDC_CONTRACT in balances else 0
+    eth_blance = round(int(balances[ZKS_ETH_CONTRACT]["balance"]) / 1e18, RATIO) if ZKS_ETH_CONTRACT in balances else 0
+    usdc_blance = round(int(balances[ZKS_USDC_CONTRACT]["balance"]) / 1e6, RATIO) if ZKS_USDC_CONTRACT in balances else 0
 
     return eth_blance, usdc_blance, tx
 
-async def get_amount(address, list):
-    total_amount = 0
-    for data in list:
-        if (data["from"].lower() == address.lower() and data["to"].lower() != EMPTYCONTRACT) or data["to"].lower() == address.lower() and data["from"].lower() != EMPTYCONTRACT:
-            symbol = data['tokenInfo']['symbol']
-            if symbol == "ETH":
-                total_amount += int(data['amount'], 16) / 1e18 * float(data['tokenInfo']['usdPrice'])
-            elif symbol == "USDC":
-                total_amount += int(data['amount'], 16) / 1e6
+async def get_sks_total_amount(session, address):
+    current_date = datetime.now()
+    formatted_date = current_date.isoformat()
+    encoded_date = quote(formatted_date)    
+    url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}/transfers?toDate={encoded_date}&limit=100&page=1"
+    async with session.get(url) as res:
+        data = await res.json()
 
-    return total_amount
+    pages = int(data["meta"]["totalPages"])   
+    total_amounts = 0
+
+    for page in range(1, pages+1):
+        url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}/transfers?toDate={encoded_date}&limit=100&page={page}"
+        async with session.get(url) as res:
+            data = await res.json()        
+
+        for item in data["items"]:
+            if item['token'] is not None and item['type'] == "transfer":
+                if item['from'].lower() == address.lower() and item['to'].lower() != EMPTYCONTRACT:
+                    symbol = item['token']['symbol']
+                    if symbol == "ETH":
+                        total_amounts += float(item['amount']) / 1e18 * ETHPRICE
+                    elif item['token']['symbol'] == "USDC":
+                        total_amounts += float(item['amount']) / 1e6      
+
+    total_amounts = round(total_amounts, 2)
+    if total_amounts < 10000:
+        total_amounts = f"[red]{total_amounts}[/red]"
+    elif total_amounts >= 250000:
+        total_amounts = f"[bold][green]{total_amounts}[/green][/bold]"        
+    elif total_amounts >= 50000:
+        total_amounts = f"[green]{total_amounts}[/green]"                        
+
+    return total_amounts
 
 async def process_transactions(address, data_list, months, weeks, days, contracts):
-    total_amount = total_fee = 0
+    total_fee = 0
     for data in data_list:
-        if data['balanceChanges'][0]['from'].lower() == address.lower():
-            total_amount += await get_amount(address, data["erc20Transfers"])
-
+        if data['from'].lower() == address.lower():
             tx_date = parse(data["receivedAt"]).replace(tzinfo=timezone.utc)
             months.add(tx_date.strftime("%Y-%m"))
             weeks.add(tx_date.strftime("%Y-%m-%W"))
             days.add(tx_date.strftime("%Y-%m-%d"))
 
-            contracts.add(data["data"]["contractAddress"])
+            contracts.add(data["to"])
 
             total_fee += round(int(data["fee"], 16) / 1e18, 5)
 
-    return total_amount, total_fee
+    return total_fee
 
 async def get_zks_last_tx(date):
     datetime_object = parse(date).replace(tzinfo=timezone.utc)
@@ -164,44 +201,28 @@ async def get_zks_last_tx(date):
     return f"{diff.seconds}s"
 
 async def get_zks_info(session, address):
-    url = f"https://zksync2-mainnet-explorer.zksync.io/transactions?limit=100&direction=older&accountAddress={address}"
+    url = f"https://block-explorer-api.mainnet.zksync.io/transactions?address={address}&limit=100&page=1"
     async with session.get(url) as res:
         data = await res.json()
 
-    total = data["total"]
-    last_tx_time = await get_zks_last_tx(data["list"][0]["receivedAt"])
+    pages = int(data["meta"]["totalPages"])
+    last_tx_time = await get_zks_last_tx(data["items"][0]["receivedAt"])
     months, weeks, days, contracts = set(), set(), set(), set()
-    
-    if total > 100:
-        total_amounts = total_fees = offset = 0
-        from_block_number = data["list"][0]["blockNumber"]
-        from_tx_index = data["list"][0]["indexInBlock"]
+    total_fees = 0
+    tasks = defaultdict(int)
 
-        while True:
-            new_url = url + f"&fromBlockNumber={from_block_number}&fromTxIndex={from_tx_index}&offset={offset}"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(new_url) as res:
-                    new_data = await res.json()         
+    for page in range(1, pages+1):
+        url = f"https://block-explorer-api.mainnet.zksync.io/transactions?address={address}&limit=100&page={page}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as res:
+                data = await res.json()         
 
-            total_amount, total_fee = await process_transactions(address, new_data["list"], months, weeks, days, contracts)
-            total_amounts += total_amount
-            total_fees += total_fee
+        total_fee = await process_transactions(address, data["items"], months, weeks, days, contracts)
+        total_fees += total_fee
 
-            list_length = len(new_data["list"])
-            if list_length < 100:
-                break
-
-            offset += list_length
-    else:
-        total_amounts, total_fees = await process_transactions(address, data["list"], months, weeks, days, contracts)
-
-    total_amounts = round(total_amounts, 2)
-    if total_amounts < 10000:
-        total_amounts = f"[red]{total_amounts}[/red]"
-    elif total_amounts >= 250000:
-        total_amounts = f"[bold][green]{total_amounts}[/green][/bold]"        
-    elif total_amounts >= 50000:
-        total_amounts = f"[green]{total_amounts}[/green]"
+        for contract in [hashs["to"].lower() for hashs in data["items"]]:
+            if contract in CONTRACT2ZKSTASK:
+                tasks[CONTRACT2ZKSTASK[contract]] += 1        
 
     mon = len(months)
     if mon < 2:
@@ -211,29 +232,16 @@ async def get_zks_info(session, address):
     elif mon >= 6:
         mon = f"[green]{mon}[/green]"        
 
-    return last_tx_time, total_amounts, round(total_fees, 5), mon, len(weeks), len(days), len(contracts)
-
-async def get_zks_task(session, address):
-    url = f"https://zksync2-mainnet-explorer.zksync.io/transactions?limit=100&direction=older&accountAddress={address}"
-    async with session.get(url) as res:
-        data = await res.json()     
-
-    tasks = defaultdict(int)
-    for contract in [hashs["data"]["contractAddress"].lower() for hashs in data["list"]]:
-        if contract in CONTRACT2ZKSTASK:
-            tasks[CONTRACT2ZKSTASK[contract]] += 1
-
-    return tasks
+    return last_tx_time, round(total_fees, 5), mon, len(weeks), len(days), len(contracts), tasks
 
 async def get_all_zks_info(session, address, idx):
     meth, mtx = await get_eth_info(session, address)
     zeth, zusdc, ztx = await get_zks_base_info(session, address)
-    ltx, amount, fee, mon, week, day, contract = await get_zks_info(session, address)
-    tasks = await get_zks_task(session, address)
+    ltx, fee, mon, week, day, contract, tasks = await get_zks_info(session, address)
+    amount = await get_sks_total_amount(session, address)
     tasks_info = [tasks[task] if task in tasks else 0 for task in task_colums]    
 
     return [f"lu{idx+1}", meth, mtx, zeth, zusdc, ztx, ltx, day, week, mon, contract, amount, fee] + tasks_info
-
 
 async def pd_show(args):
     index = args.idx
@@ -325,7 +333,6 @@ async def rich_show(args):
                 table.add_row(*[str(r) for r in result])
 
     Console().print(table)
-
 
 async def main(args):
     if args.use_pd:
