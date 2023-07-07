@@ -304,7 +304,7 @@ async def rich_show(args):
                 usdc += result[USDC_INDEX]
                 fee += result[FEE_INDEX]
 
-                if result[ETH_INDEX] <= 0.005:
+                if result[ETH_INDEX] <= 0.01:
                     result[ETH_INDEX] = f"[red]{result[ETH_INDEX]}[/red]"
 
                 table.add_row(*[str(r) for r in result])
