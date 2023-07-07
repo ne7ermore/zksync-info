@@ -139,14 +139,16 @@ async def get_sks_total_amount(session, address):
     pages = int(data["meta"]["totalPages"])   
     total_amounts = 0
 
+    seen = set()
     for page in range(1, pages+1):
         url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}/transfers?toDate={encoded_date}&limit=100&page={page}"
         async with session.get(url) as res:
             data = await res.json()        
 
         for item in data["items"]:
-            if item['token'] is not None and item['type'] == "transfer":
-                if item['from'].lower() == address.lower() and item['to'].lower() != EMPTYCONTRACT:
+            if item['token'] is not None and item['type'] == "transfer" and item["transactionHash"] not in seen:
+                if item['from'].lower() == address.lower() and item['to'].lower() != EMPTYCONTRACT or item['to'].lower() == address.lower() and item['from'].lower() != EMPTYCONTRACT:
+                    seen.add(item["transactionHash"])
                     symbol = item['token']['symbol']
                     if symbol == "ETH":
                         total_amounts += float(item['amount']) / 1e18 * ETHPRICE
