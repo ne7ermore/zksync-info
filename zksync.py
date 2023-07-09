@@ -20,6 +20,10 @@ ETH_INDEX = 3
 USDC_INDEX = 4
 FEE_INDEX = 12
 
+TX_MIN = 15
+TX_MIDDLE = 25
+TX_MAX = 100
+
 ZKS_ETH_CONTRACT = "0x000000000000000000000000000000000000800A"
 ZKS_USDC_CONTRACT = "0x3355df6D4c9C3035724Fd0e3914dE96A5a83aaf4"
 EMPTYCONTRACT = "0x0000000000000000000000000000000000008001".lower()
@@ -115,11 +119,11 @@ async def get_zks_base_info(session, address):
         data = await res.json()    
 
     tx = data["sealedNonce"]
-    if tx < 10:
+    if tx < TX_MIN:
         tx = f"[red]{tx}[/red]"
-    elif tx >= 100:
+    elif tx >= TX_MAX:
         tx = f"[bold][green]{tx}[/green][/bold]"
-    elif tx >= 25:
+    elif tx >= TX_MIDDLE:
         tx = f"[green]{tx}[/green]"
     
     balances = data["balances"]
