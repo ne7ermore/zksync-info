@@ -44,7 +44,6 @@ CONTRACTZKSTASK = (
     ["0xC5db68F30D21cBe0C9Eac7BE5eA83468d69297e6", "reactor"],
     ["0x04e9Db37d8EA0760072e1aCE3F2A219988Fdac29", "reactor"],     
     ["0xCBE2093030F485adAaf5b61deb4D9cA8ADEAE509", "zns"],
-    ["0x3F9931144300f5Feada137d7cfE74FAaa7eF6497", "race"],
 )
 
 CONTRACT2ZKSTASK = {x.lower(): y for x, y in CONTRACTZKSTASK}
