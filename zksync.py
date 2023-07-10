@@ -127,8 +127,8 @@ async def get_zks_base_info(session, address):
     
     balances = data["balances"]
 
-    eth_blance = round(int(balances[ZKS_ETH_CONTRACT]["balance"]) / 1e18, RATIO) if ZKS_ETH_CONTRACT in balances else 0
-    usdc_blance = round(int(balances[ZKS_USDC_CONTRACT]["balance"]) / 1e6, RATIO) if ZKS_USDC_CONTRACT in balances else 0
+    eth_blance = round(int(balances[ZKS_ETH_CONTRACT]["balance"]) / 1e18, RATIO) if ZKS_ETH_CONTRACT in balances else 0.
+    usdc_blance = round(int(balances[ZKS_USDC_CONTRACT]["balance"]) / 1e6, RATIO) if ZKS_USDC_CONTRACT in balances else 0.
 
     return eth_blance, usdc_blance, tx
 
