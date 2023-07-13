@@ -134,10 +134,11 @@ async def get_zks_base_info(session, address):
     return eth_blance, usdc_blance, tx
 
 async def get_sks_total_amount(session, address):
-    current_date = datetime.now()
-    formatted_date = current_date.isoformat()
-    encoded_date = quote(formatted_date)    
-    url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}/transfers?toDate={encoded_date}&limit=100&page=1"
+    # current_date = datetime.now()
+    # formatted_date = current_date.isoformat()
+    # encoded_date = quote(formatted_date)    
+    # url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}/transfers?toDate={encoded_date}&limit=100&page=1"
+    url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}/transfers?limit=100&page=1"
     async with session.get(url) as res:
         data = await res.json()
 
@@ -146,7 +147,8 @@ async def get_sks_total_amount(session, address):
 
     seen = set()
     for page in range(1, pages+1):
-        url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}/transfers?toDate={encoded_date}&limit=100&page={page}"
+        # url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}/transfers?toDate={encoded_date}&limit=100&page={page}"
+        url = f"https://block-explorer-api.mainnet.zksync.io/address/{address}/transfers?limit=100&page={page}"
         async with session.get(url) as res:
             data = await res.json()        
 
