@@ -1,6 +1,7 @@
 wallet.py
 zks-info.xlsx
 test.*
+wallet
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
