@@ -172,7 +172,7 @@ async def process_transactions(address, data_list, months, weeks, days, contract
         if data['from'].lower() == address.lower():
             tx_date = parse(data["receivedAt"]).replace(tzinfo=timezone.utc)
             months.add(tx_date.strftime("%Y-%m"))
-            weeks.add(tx_date.strftime("%Y-%m-%W"))
+            weeks.add(tx_date.strftime("%Y-%W"))
             days.add(tx_date.strftime("%Y-%m-%d"))
 
             contracts.add(data["to"])
@@ -217,9 +217,8 @@ async def get_zks_info(session, address):
 
     for page in range(1, pages+1):
         url = f"https://block-explorer-api.mainnet.zksync.io/transactions?address={address}&limit=100&page={page}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as res:
-                data = await res.json()         
+        async with session.get(url) as res:
+            data = await res.json()         
 
         total_fee = await process_transactions(address, data["items"], months, weeks, days, contracts)
         total_fees += total_fee
