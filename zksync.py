@@ -254,7 +254,7 @@ async def pd_show(args):
         if index == 0:
             tasks = []
 
-            for idx, address in enumerate(ADDRESSLIST):
+            for idx, address in enumerate(ZKSADDRESSLIST):
                 tasks.append(asyncio.create_task(get_all_zks_info(session, address, idx)))
 
             results = await asyncio.gather(*tasks)
@@ -266,9 +266,9 @@ async def pd_show(args):
 
         else:
             idx = index-1
-            assert idx < len(ADDRESSLIST)
+            assert idx < len(ZKSADDRESSLIST)
 
-            address = ADDRESSLIST[idx]
+            address = ZKSADDRESSLIST[idx]
             tasks = [asyncio.create_task(get_all_zks_info(session, address, idx))]
             results = await asyncio.gather(*tasks)
             await session.close()            
@@ -293,7 +293,7 @@ async def rich_show(args):
         if index == 0:
             tasks = []
 
-            for idx, address in enumerate(ADDRESSLIST):
+            for idx, address in enumerate(ZKSADDRESSLIST):
                 tasks.append(asyncio.create_task(get_all_zks_info(session, address, idx)))
 
             results = await asyncio.gather(*tasks)
@@ -322,9 +322,9 @@ async def rich_show(args):
 
         else:
             idx = index-1
-            assert idx < len(ADDRESSLIST)
+            assert idx < len(ZKSADDRESSLIST)
 
-            address = ADDRESSLIST[idx]
+            address = ZKSADDRESSLIST[idx]
             tasks = [asyncio.create_task(get_all_zks_info(session, address, idx))]
             results = await asyncio.gather(*tasks)
             await session.close()    
